@@ -23,7 +23,8 @@ def apply_fn(state: angr.SimState, data: bytes):
         s.pos = 0
     return state
 
-#SEED VALUE NEEDED FOR TEST
+
+# SEED VALUE NEEDED FOR TEST
 def main(verbose=True, seed=12751):
     target = os.path.join(os.path.dirname(__file__), "xmllint_bin")
 
@@ -52,14 +53,18 @@ def main(verbose=True, seed=12751):
     )
 
     def progress_callback(stats: ClientStats, type_: str, _client_id: int):
-        print(
-            f"[{type_}] C: {stats.corpus_size}, O: {stats.objective_size}, E: {stats.executions}, E/s: {stats.execs_per_sec_pretty}, Cov: {stats.edges_hit}/{stats.edges_total}"
+        msg = (
+            f"[{type_}] "
+            f"C: {stats.corpus_size}, O: {stats.objective_size}, "
+            f"E: {stats.executions}, E/s: {stats.execs_per_sec_pretty}, "
+            f"Cov: {stats.edges_hit}/{stats.edges_total}"
         )
+        print(msg)
 
     before = len(fuzzer.corpus())
     idx = fuzzer.run_once(progress_callback=progress_callback if verbose else None)
     after = len(fuzzer.corpus())
-    #take last mutation (should be the new one)
+    # take last mutation (should be the new one)
     new_input = fuzzer.corpus()[after - 1]
     if verbose:
         print(f"Corpus now has {len(fuzzer.corpus())} inputs.")
@@ -74,13 +79,14 @@ def test():
     # Basic corpus growth sanity checks
     assert after == before + 1
     assert 0 <= idx < after
-    
+
     # Desired mutation check: change entity reference '&y;' -> '&x;'
     expected = b"<!DOCTYPE a [<!ENTITY x 'y'>]><a>&x;</a>"
     assert new_input == expected
     return True
 
-#looks for right seed to get deterministic answer
+
+# looks for right seed to get deterministic answer
 def search_for_seed():
     seed = 1
     expected = b"<!DOCTYPE a [<!ENTITY x 'y'>]><a>&x;</a>"
@@ -91,6 +97,7 @@ def search_for_seed():
             print(f"Found Seed: {seed}")
             break
         seed += 1
+
 
 if __name__ == "__main__":
     main()
