@@ -23,8 +23,8 @@ def apply_fn(state: angr.SimState, data: bytes):
         s.pos = 0
     return state
 
-
-def main(verbose=True, seed=0):
+#SEED VALUE NEEDED FOR TEST
+def main(verbose=True, seed=12751):
     target = os.path.join(os.path.dirname(__file__), "xmllint_bin")
 
     # xmllint CLI: read from stdin with '-' and keep output quiet/nonet
@@ -58,13 +58,14 @@ def main(verbose=True, seed=0):
 
     before = len(fuzzer.corpus())
     idx = fuzzer.run_once(progress_callback=progress_callback if verbose else None)
-    new_input = fuzzer.corpus()[idx]
+    after = len(fuzzer.corpus())
+    #take last mutation (should be the new one)
+    new_input = fuzzer.corpus()[after - 1]
     if verbose:
         print(f"Corpus now has {len(fuzzer.corpus())} inputs.")
         print(f"Corpus inputs: \n{fuzzer.corpus().to_bytes_list()}")
         print(f"Found {len(fuzzer.solutions())} solutions.")
         print(f"Found the following solutions: \n{fuzzer.solutions().to_bytes_list()}")
-    after = len(fuzzer.corpus())
     return idx, before, after, new_input
 
 
@@ -92,4 +93,4 @@ def search_for_seed():
         seed += 1
 
 if __name__ == "__main__":
-    search_for_seed()
+    main()
