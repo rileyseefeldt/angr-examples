@@ -262,6 +262,10 @@ def test_defcon2019quals_veryandroidoso():
     exampletest_single("defcon2019quals_veryandroidoso")
 
 
+def test_xmllint():
+    exampletest_single("xmllint")
+
+
 ## END EXAMPLE TESTS
 
 
