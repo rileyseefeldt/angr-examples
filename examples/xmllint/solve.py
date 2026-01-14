@@ -14,14 +14,17 @@ def create_corpus():
     ]
 
 
-def apply_fn(state: angr.SimState, data: bytes):
+def apply_fn(state: angr.SimState, data: bytes) -> None:
     # Arrange a recognizable return address
-    state.project.factory.cc().return_addr.set_value(state, 0xDEADBEEF)
+    p = state.project
+    if p is not None:
+        ra = p.factory.cc().return_addr
+        if ra is not None:
+            ra.set_value(state, 0xDEADBEEF)
     s = state.posix.stdin
     s.content = [(claripy.BVV(data), claripy.BVV(len(data), state.arch.bits))]
     if hasattr(s, "pos"):
         s.pos = 0
-    return state
 
 
 # SEED VALUE NEEDED FOR TEST
