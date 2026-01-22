@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 import os
-
-import angr
 import claripy
+import angr
 from angr.rustylib.fuzzer import Fuzzer, InMemoryCorpus, ClientStats
 from angr import sim_options as so
 
@@ -27,14 +26,18 @@ def apply_fn(state: angr.SimState, data: bytes) -> None:
         s.pos = 0
 
 
+class _StopFuzzing(Exception):
+    pass
+
+
 # SEED VALUE NEEDED FOR TEST
-def main(verbose=True, seed=12751):
+def main(verbose=True, seed=12751, stop_early=True):
     target = os.path.join(os.path.dirname(__file__), "xmllint_bin")
 
     # xmllint CLI: read from stdin with '-' and keep output quiet/nonet
     xmllint_args = [target, "--noout", "--nonet", "--recover", "--noent", "-"]
 
-    project = angr.Project(target, auto_load_libs=True, use_sim_procedures=False)
+    project = angr.Project(target, auto_load_libs=False, use_sim_procedures=True)
     base_state = project.factory.entry_state(
         args=xmllint_args,
         add_options={
@@ -62,44 +65,52 @@ def main(verbose=True, seed=12751):
             f"E: {stats.executions}, E/s: {stats.execs_per_sec_pretty}, "
             f"Cov: {stats.edges_hit}/{stats.edges_total}"
         )
-        print(msg)
+        if verbose:
+            print(msg, flush=True)
+        if stop_early and type_ == "Testcase":
+            raise _StopFuzzing()
 
     before = len(fuzzer.corpus())
-    idx = fuzzer.run_once(progress_callback=progress_callback if verbose else None)
+
+    try:
+        fuzzer.run_once(
+            progress_callback=progress_callback if verbose or stop_early else None
+        )
+    except _StopFuzzing:
+        pass
+
+    # Can remove this part once monitor.rs is fixed
+    except BaseException as e:
+        # The Rust fuzzer code panics when Python raises an exception in the callback.
+        # This is a known bug (FIXME in monitor.rs:113). The PanicException wraps our
+        # _StopFuzzing exception, so we check if it's our expected early-stop signal.
+        if type(e).__name__ == "PanicException" and "_StopFuzzing" in str(e):
+            pass  # Expected: our stop signal triggered the panic
+        else:
+            raise  # Re-raise unexpected exceptions
+
     after = len(fuzzer.corpus())
-    # take last mutation (should be the new one)
-    new_input = fuzzer.corpus()[after - 1]
+    new_input = fuzzer.corpus()[before]
     if verbose:
-        print(f"Corpus now has {len(fuzzer.corpus())} inputs.")
-        print(f"Corpus inputs: \n{fuzzer.corpus().to_bytes_list()}")
-        print(f"Found {len(fuzzer.solutions())} solutions.")
-        print(f"Found the following solutions: \n{fuzzer.solutions().to_bytes_list()}")
-    return idx, before, after, new_input
+        print(f"Corpus now has {len(fuzzer.corpus())} inputs.", flush=True)
+        print(f"Corpus inputs: \n{fuzzer.corpus().to_bytes_list()}", flush=True)
+        print(f"Found {len(fuzzer.solutions())} solutions.", flush=True)
+        print(
+            f"Found the following solutions: \n{fuzzer.solutions().to_bytes_list()}",
+            flush=True,
+        )
+    return before, after, new_input
 
 
 def test():
-    idx, before, after, new_input = main(verbose=False)
-    # Basic corpus growth sanity checks
+    before, after, new_input = main(verbose=False, stop_early=True)
+    # Basic corpus growth sanity check
     assert after == before + 1
-    assert 0 <= idx < after
 
     # Desired mutation check: change entity reference '&y;' -> '&x;'
     expected = b"<!DOCTYPE a [<!ENTITY x 'y'>]><a>&x;</a>"
     assert new_input == expected
     return True
-
-
-# looks for right seed to get deterministic answer
-def search_for_seed():
-    seed = 1
-    expected = b"<!DOCTYPE a [<!ENTITY x 'y'>]><a>&x;</a>"
-    while True:
-        print(f"Attempting Seed: {seed}")
-        _, _, _, new_input = main(verbose=False, seed=seed)
-        if expected == new_input:
-            print(f"Found Seed: {seed}")
-            break
-        seed += 1
 
 
 if __name__ == "__main__":
