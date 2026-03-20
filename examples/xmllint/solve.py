@@ -6,7 +6,26 @@ import unittest
 import angr
 import claripy
 from angr.rustylib.fuzzer import Fuzzer, InMemoryCorpus, ClientStats
+from angr.procedures.glibc.__libc_start_main import (
+    __libc_start_main as _libc_start_main,
+)
 from angr import sim_options as so
+
+
+class ConcreteLibcStartMain(angr.SimProcedure):
+    """Lightweight __libc_start_main for concrete (icicle) execution."""
+
+    NO_RET = True
+
+    def run(self, main, argc, argv, init, fini):
+        main, argc, argv, _, _ = _libc_start_main._extract_args(
+            self.state, main, argc, argv, init, fini
+        )
+        self.state.regs.rdi = argc
+        self.state.regs.rsi = argv
+        envp = argv + (argc + 1) * self.state.arch.bytes
+        self.state.regs.rdx = envp
+        self.jump(main)
 
 
 def create_corpus():
@@ -36,6 +55,9 @@ def main(verbose=True, seed=12751):
     xmllint_args = [target, "--noout", "--nonet", "--recover", "--noent", "-"]
 
     project = angr.Project(target, auto_load_libs=True, use_sim_procedures=False)
+    sym = project.loader.find_symbol('__libc_start_main')
+    if sym:
+        project.hook(sym.rebased_addr, ConcreteLibcStartMain())
     base_state = project.factory.entry_state(
         args=xmllint_args,
         add_options={
@@ -54,6 +76,7 @@ def main(verbose=True, seed=12751):
         solutions=solutions,
         timeout=0,
         seed=seed,
+        max_icount=50_000_000,
     )
 
     def progress_callback(stats: ClientStats, type_: str, _client_id: int):
@@ -78,7 +101,7 @@ def main(verbose=True, seed=12751):
     return idx, before, after, new_input
 
 
-@unittest.skip("disabled")
+# @unittest.skip("disabled")
 def test():
     idx, before, after, new_input = main(verbose=False)
     # Basic corpus growth sanity checks
