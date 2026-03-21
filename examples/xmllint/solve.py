@@ -54,7 +54,6 @@ def main(verbose=True, seed=12751):
         solutions=solutions,
         timeout=0,
         seed=seed,
-        max_icount=50_000_000,
     )
 
     def progress_callback(stats: ClientStats, type_: str, _client_id: int):
