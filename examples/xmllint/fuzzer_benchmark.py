@@ -11,7 +11,8 @@ from pathlib import Path
 import angr
 import claripy
 from angr import sim_options as so
-from angr.rustylib.fuzzer import ClientStats, Fuzzer, InMemoryCorpus
+from angr.rustylib.fuzzer import Fuzzer, InMemoryCorpus
+
 
 TARGET_ARGS = ["--noout", "--nonet", "--recover", "--noent"]
 SEED_CORPUS = [b"<!DOCTYPE a [<!ENTITY x 'y'>]><a>&y;</a>"]
@@ -65,21 +66,18 @@ def run_angr(target: Path, duration: int) -> tuple[int, float]:
         solutions=InMemoryCorpus(),
         timeout=0,
         seed=12751,
+        max_icount=50_000_000,
     )
 
-    deadline = time.monotonic() + duration
-    last_stats: ClientStats | None = None
+    start = time.monotonic()
+    deadline = start + duration
     while time.monotonic() < deadline:
+        fuzzer.run_once()
 
-        def callback(stats: ClientStats, _event_type: str, _client_id: int):
-            nonlocal last_stats
-            last_stats = stats
-
-        fuzzer.run_once(progress_callback=callback)
-
-    if last_stats is None:
-        raise RuntimeError("angr run produced no stats")
-    return last_stats.executions, last_stats.execs_per_sec
+    elapsed = time.monotonic() - start
+    executions = fuzzer.executions
+    execs_per_sec = executions / elapsed if elapsed > 0 else 0.0
+    return executions, execs_per_sec
 
 
 def run_afl(target: Path, duration: int) -> tuple[int, float]:
