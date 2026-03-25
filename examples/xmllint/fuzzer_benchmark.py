@@ -21,12 +21,11 @@ BENCHMARK_DURATION = 30
 
 
 def apply_fn(state: angr.SimState, data: bytes) -> None:
-    project = state.project
-    if project is not None:
-        return_addr = project.factory.cc().return_addr
-        if return_addr is not None:
-            return_addr.set_value(state, 0xDEADBEEF)
-
+    # For entry_state with dynamically-linked binaries, do NOT call
+    # cc.return_addr.set_value() — it overwrites [RSP] which is argc, not a
+    # return address.  _ConcreteLibcStartMain already writes the exit
+    # sentinel as main's return address, and the executor adds a breakpoint
+    # at exit directly.
     state.posix.stdin.content = [(claripy.BVV(data), claripy.BVV(len(data), state.arch.bits))]
     if hasattr(state.posix.stdin, "pos"):
         state.posix.stdin.pos = 0
@@ -66,16 +65,16 @@ def run_angr(target: Path, duration: int) -> tuple[int, float]:
         solutions=InMemoryCorpus(),
         timeout=0,
         seed=12751,
-        max_icount=50_000_000,
     )
 
     start = time.monotonic()
     deadline = start + duration
+    executions = 0
     while time.monotonic() < deadline:
         fuzzer.run_once()
+        executions += 1
 
     elapsed = time.monotonic() - start
-    executions = fuzzer.executions
     execs_per_sec = executions / elapsed if elapsed > 0 else 0.0
     return executions, execs_per_sec
 

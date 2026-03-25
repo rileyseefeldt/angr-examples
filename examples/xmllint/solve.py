@@ -16,12 +16,11 @@ def create_corpus():
 
 
 def apply_fn(state: angr.SimState, data: bytes) -> None:
-    # Arrange a recognizable return address
-    p = state.project
-    if p is not None:
-        ra = p.factory.cc().return_addr
-        if ra is not None:
-            ra.set_value(state, 0xDEADBEEF)
+    # For entry_state with dynamically-linked binaries, do NOT call
+    # cc.return_addr.set_value() — it overwrites [RSP] which is argc, not a
+    # return address.  _ConcreteLibcStartMain already writes the exit
+    # sentinel as main's return address, and the executor adds a breakpoint
+    # at exit directly.
     s = state.posix.stdin
     s.content = [(claripy.BVV(data), claripy.BVV(len(data), state.arch.bits))]
     if hasattr(s, "pos"):
