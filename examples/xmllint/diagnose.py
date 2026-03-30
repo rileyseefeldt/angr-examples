@@ -18,6 +18,7 @@ import claripy
 from angr import sim_options as so
 from angr.emulator import Emulator, EmulatorStopReason, EngineException
 from angr.engines.icicle import UberIcicleEngine
+from solve import setup_concrete_hooks, resolve_got_entries
 
 # ---------------------------------------------------------------------------
 # Configuration (matches fuzzer_benchmark.py)
@@ -231,6 +232,10 @@ def main():
     project = angr.Project(target, auto_load_libs=True, use_sim_procedures=False)
     print(f"    arch={project.arch.name}  loader objects: {len(project.loader.all_objects)}")
 
+    # Set up concrete execution hooks
+    setup_concrete_hooks(project)
+    got_patches = resolve_got_entries(project)
+
     # Resolve return sentinel from a mapped symbol (icicle needs mapped pages).
     exit_sym = project.loader.find_symbol("exit")
     if exit_sym is None:
@@ -245,6 +250,10 @@ def main():
             so.ZERO_FILL_UNCONSTRAINED_REGISTERS,
         },
     )
+
+    # Apply GOT patches
+    for addr, data in got_patches.items():
+        state.memory.store(addr, data)
 
     # -----------------------------------------------------------------------
     # Step 2: apply_fn (identical to benchmark)
@@ -267,10 +276,9 @@ def main():
     # -----------------------------------------------------------------------
     # Step 3: Create engine (identical to executor.rs)
     # -----------------------------------------------------------------------
-    print("\n[4] Creating UberIcicleEngine with snapshot mode + concrete hooks")
+    print("\n[4] Creating UberIcicleEngine with snapshot mode")
     engine = UberIcicleEngine(project)
     engine.enable_snapshot_mode()
-    engine.setup_concrete_hooks()
 
     # Report registered hooks
     print(f"    Registered sim_procedures ({len(project._sim_procedures)}):")
