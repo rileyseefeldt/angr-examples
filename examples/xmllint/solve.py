@@ -6,7 +6,6 @@ import angr
 import claripy
 from angr import sim_options as so
 from angr.rustylib.fuzzer import Fuzzer, InMemoryCorpus, ClientStats
-from angr.utils.concrete import setup_concrete_hooks
 
 
 # ---------------------------------------------------------------------------
@@ -47,9 +46,6 @@ def main(verbose=True, seed=12751):
     for addr, proc in list(project._sim_procedures.items()):
         if isinstance(proc, IFuncResolver):
             project.unhook(addr)
-
-    # Set up concrete execution hooks before creating the fuzzer
-    setup_concrete_hooks(project)
 
     base_state = project.factory.entry_state(
         args=xmllint_args,
